@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Not } from 'typeorm';
+import { Repository, ILike, Not, In, Brackets } from 'typeorm';
 import { Video } from './entities/video.entity';
 import { CreateVideoDto } from './dto/create-video.dto';
 import { UpdateVideoDto } from './dto/update-video.dto';
@@ -10,7 +10,6 @@ import * as path from 'path';
 import { Response, Request } from 'express';
 import { generateUniqueSlug } from '@/common/utils/slug-generator';
 import { spawn } from 'child_process';
-import { join } from 'path';
 import { unlink } from 'fs/promises';
 
 @Injectable()
@@ -64,6 +63,19 @@ export class VideosService {
   ) {
     const slug = await generateUniqueSlug(dto.title, this.videoRepo);
 
+    // videoCode avtomatik generatsiya qilinadi
+    let videoCode = 10000;
+
+    const lastVideoWithCode = await this.videoRepo
+      .createQueryBuilder('video')
+      .where('video.videoCode IS NOT NULL')
+      .orderBy('video.videoCode', 'DESC')
+      .getOne();
+
+    if (lastVideoWithCode?.videoCode) {
+      videoCode = lastVideoWithCode.videoCode + 1;
+    }
+
     const inputPath = path.join(
       process.cwd(),
       'uploads/videos',
@@ -80,18 +92,54 @@ export class VideosService {
     const video = this.videoRepo.create({
       ...dto,
       slug,
+      videoCode, // avtomatik qiymat
     });
 
     return this.videoRepo.save(video);
   }
 
-  // async create(
-  //   dto: CreateVideoDto & { videoFilename: string; thumbnailFilename?: string },
-  // ) {
-  //   const slug = await generateUniqueSlug(dto.title, this.videoRepo);
-  //   const video = this.videoRepo.create({ ...dto, slug });
-  //   return this.videoRepo.save(video);
-  // }
+  async suggest(
+    search: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    data: VideoResponseDto[];
+  }> {
+    const qb = this.videoRepo.createQueryBuilder('video');
+
+    const s = (search ?? '').trim();
+    if (s) {
+      qb.andWhere(
+        new Brackets((q) => {
+          q.where('video.title ILIKE :s').orWhere(`
+           EXISTS (
+             SELECT 1 FROM unnest(video.tags) AS tag
+             WHERE tag ILIKE :s
+           )
+         `);
+        }),
+      ).setParameter('s', `%${s}%`);
+    }
+
+    const [videos, total] = await qb
+      .orderBy('video.createdAt', 'DESC')
+      .addOrderBy('video.id', 'DESC') // barqaror pagination uchun
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    return {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      data: videos.map((v) => new VideoResponseDto(v)),
+    };
+  }
 
   async findAll(page = 1, limit = 10, categoryId?: string, search?: string) {
     const where: any = {};
@@ -106,10 +154,6 @@ export class VideosService {
     });
 
     const totalPages = Math.ceil(total / limit);
-    // console.log(
-    //   '[VideoResponseDto]',
-    //   videos.map((v) => new VideoResponseDto(v)),
-    // );
 
     return {
       page,
@@ -122,13 +166,45 @@ export class VideosService {
 
   async findOne(id: string) {
     const video = await this.videoRepo.findOne({ where: { id } });
-    if (!video) throw new NotFoundException('Video topilmadi');
+    if (!video) throw new NotFoundException('Video not found');
     return new VideoResponseDto(video);
+  }
+
+  async findByIds(ids: string[]) {
+    console.log(ids);
+    const videos = await this.videoRepo.find({
+      where: {
+        id: In(ids),
+      },
+      order: { createdAt: 'DESC' },
+    });
+
+    return videos.map((video) => new VideoResponseDto(video));
+  }
+
+  async likeVideo(id: string) {
+    const video = await this.videoRepo.findOneBy({ id });
+    if (!video) throw new NotFoundException('Video topilmadi');
+
+    await this.videoRepo.increment({ id }, 'likes', 1);
+    return { success: true, likes: video.likes + 1 };
+  }
+
+  async unlikeVideo(id: string) {
+    const video = await this.videoRepo.findOneBy({ id });
+    if (!video) throw new NotFoundException('Video topilmadi');
+
+    // likes soni 0 dan kam bo‘lib ketmasin
+    const newLikes = video.likes > 0 ? video.likes - 1 : 0;
+
+    await this.videoRepo.update({ id }, { likes: newLikes });
+    return { success: true, likes: newLikes };
   }
 
   async findBySlug(slug: string) {
     const video = await this.videoRepo.findOne({ where: { slug } });
-    if (!video) throw new NotFoundException('Video topilmadi');
+    if (!video) throw new NotFoundException('Video not found');
+    await this.videoRepo.increment({ id: video.id }, 'views', 1);
     return new VideoResponseDto(video);
   }
 
@@ -201,6 +277,7 @@ export class VideosService {
     });
 
     if (!mainVideo) throw new NotFoundException('Video topilmadi');
+    this.videoRepo.increment({ id: mainVideo.id }, 'views', 1).then();
 
     const allRelated = await this.videoRepo.find({
       where: {

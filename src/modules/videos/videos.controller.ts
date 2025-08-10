@@ -44,6 +44,8 @@ export class VideosController {
         slug: { type: 'string' },
         description: { type: 'string' },
         categoryId: { type: 'string' },
+        views: { type: 'number' },
+        likes: { type: 'number' },
         tags: { type: 'array', items: { type: 'string' } },
         amazonLink: { type: 'string' },
         video: { type: 'string', format: 'binary' },
@@ -90,6 +92,16 @@ export class VideosController {
     });
   }
 
+  @Get('suggest')
+  @ApiOperation({ summary: 'Search tavsiyalari (autosuggest)' })
+  suggest(
+    @Query('search') search: string,
+    @Query('page') page = 1,
+    @Query('limit') limit = 10,
+  ) {
+    return this.videosService.suggest(search, Number(page), Number(limit));
+  }
+
   @Get()
   @ApiOperation({ summary: 'Videolar ro‘yxati (filter + pagination)' })
   @ApiResponse({ status: 200, type: [VideoResponseDto] })
@@ -100,6 +112,12 @@ export class VideosController {
     @Query('search') search?: string,
   ) {
     return this.videosService.findAll(+page, +limit, categoryId, search);
+  }
+
+  @Get('liked')
+  getLikedVideos(@Query('ids') ids: string[] | string) {
+    const idArray = Array.isArray(ids) ? ids : [ids];
+    return this.videosService.findByIds(idArray);
   }
 
   // @Get(':id')
@@ -127,6 +145,8 @@ export class VideosController {
         slug: { type: 'string' },
         description: { type: 'string' },
         categoryId: { type: 'string' },
+        views: { type: 'number', nullable: true },
+        likes: { type: 'number', nullable: true },
         tags: { type: 'array', items: { type: 'string' } },
         amazonLink: { type: 'string' },
         video: { type: 'string', format: 'binary' },
@@ -206,5 +226,17 @@ export class VideosController {
     @Res() res: Response,
   ) {
     return this.videosService.streamVideo(filename, req, res);
+  }
+
+  @Post(':id/like')
+  @ApiOperation({ summary: 'Videoga like berish' })
+  async likeVideo(@Param('id') id: string) {
+    return this.videosService.likeVideo(id);
+  }
+
+  @Post(':id/unlike')
+  @ApiOperation({ summary: 'Videodan like olib tashlash' })
+  async unlikeVideo(@Param('id') id: string) {
+    return this.videosService.unlikeVideo(id);
   }
 }

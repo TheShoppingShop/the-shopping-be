@@ -31,6 +31,24 @@ export class Video {
   @Column({ nullable: true })
   amazonLink: string;
 
+  @Column({ default: 0 })
+  views: number;
+
+  @Column({ nullable: true })
+  metaTitle?: string;
+
+  @Column({ nullable: true })
+  metaDescription?: string;
+
+  @Column('text', { array: true, nullable: true })
+  metaKeywords?: string[];
+
+  @Column({ default: 0 })
+  likes: number;
+
+  @Column({ unique: true, nullable: true })
+  videoCode: number;
+
   @Column('text', { array: true, default: [] })
   tags: string[];
 
