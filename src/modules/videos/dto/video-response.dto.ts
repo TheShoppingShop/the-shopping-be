@@ -37,12 +37,12 @@ export class VideoResponseDto {
     this.metaKeywords = video.metaKeywords;
     this.videoCode = video.videoCode;
 
-    const BASE_URL = process.env.BASE_URL || 'http://localhost:3011';
+    const DOMAIN = process.env.DOMAIN || 'http://localhost:3011';
     const baseName = video.videoFilename.replace('.mp4', '');
 
-    this.videoUrl = `${BASE_URL}/videos/stream/${baseName}.m3u8`;
+    this.videoUrl = `${DOMAIN}/videos/stream/${baseName}.m3u8`;
     this.thumbnailUrl = video.thumbnailFilename
-      ? `${BASE_URL}/uploads/thumbnails/${video.thumbnailFilename}`
+      ? `${DOMAIN}/uploads/thumbnails/${video.thumbnailFilename}`
       : undefined;
   }
 }

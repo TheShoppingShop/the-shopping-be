@@ -24,7 +24,7 @@ export class CategoryResponseDto {
     this.createdAt = category.createdAt;
 
     this.imgUrl = category.imgUrl
-      ? `${process.env.APP_URL || 'http://localhost:3011'}${category.imgUrl}`
+      ? `${process.env.DOMAIN || 'http://localhost:3011'}${category.imgUrl}`
       : null;
   }
 }
