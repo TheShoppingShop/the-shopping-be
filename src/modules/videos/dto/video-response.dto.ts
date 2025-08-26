@@ -11,6 +11,8 @@ export class VideoResponseDto {
   @ApiProperty() views?: number;
   @ApiProperty() thumbnailUrl?: string;
   @ApiProperty() amazonLink?: string;
+  @ApiProperty() videoFilename: string;
+  @ApiProperty() thumbnailFilename?: string;
   @ApiProperty() metaTitle?: string;
   @ApiProperty() metaDescription?: string;
   @ApiProperty() videoCode?: number;
@@ -36,6 +38,9 @@ export class VideoResponseDto {
     this.metaDescription = video.metaDescription;
     this.metaKeywords = video.metaKeywords;
     this.videoCode = video.videoCode;
+
+    this.videoFilename = video.videoFilename;
+    this.thumbnailFilename = video.thumbnailFilename;
 
     const DOMAIN = process.env.DOMAIN || 'http://localhost:3011';
     const baseName = video.videoFilename.replace('.mp4', '');

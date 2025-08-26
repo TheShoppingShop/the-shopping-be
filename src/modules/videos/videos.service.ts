@@ -11,6 +11,8 @@ import { Response, Request } from 'express';
 import { generateUniqueSlug } from '@/common/utils/slug-generator';
 import { spawn } from 'child_process';
 import { unlink } from 'fs/promises';
+import { sync as globSync } from 'glob';
+import { fileExists } from '@/utils/helper-functions';
 
 @Injectable()
 export class VideosService {
@@ -46,10 +48,6 @@ export class VideosService {
       ];
 
       const ffmpeg = spawn('ffmpeg', args);
-
-      ffmpeg.stderr.on('data', (data) => {
-        console.log('📦 FFmpeg:', data.toString());
-      });
 
       ffmpeg.on('close', (code) => {
         if (code === 0) resolve();
@@ -171,7 +169,6 @@ export class VideosService {
   }
 
   async findByIds(ids: string[]) {
-    console.log(ids);
     const videos = await this.videoRepo.find({
       where: {
         id: In(ids),
@@ -267,7 +264,47 @@ export class VideosService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const video = await this.findOne(id); // bu VideoResponseDto bo‘lishi mumkin
+
+    // Fayl bazasi yo‘llari
+    const videoDir = path.join(process.cwd(), 'uploads/videos');
+    const thumbDir = path.join(process.cwd(), 'uploads/thumbnails');
+
+    const onlyName = path.basename(video.videoFilename);
+    // Videoning bazaviy nomi (video123.mp4 → video123)
+    const baseName = onlyName.replace(path.extname(onlyName), '');
+
+    try {
+      // 🔹 .mp4 yoki .mov (video fayl)
+      const originalPath = path.join(videoDir, video.videoFilename);
+      if (originalPath && (await fileExists(originalPath))) {
+        await fs.promises.unlink(originalPath);
+      }
+
+      // 🔹 .m3u8 fayl
+      const m3u8Path = path.join(videoDir, `${baseName}.m3u8`);
+      if (await fileExists(m3u8Path)) {
+        await fs.promises.unlink(m3u8Path);
+      }
+
+      // 🔹 .ts segmentlar
+      const tsFiles = globSync(path.join(videoDir, `${baseName}*.ts`));
+      for (const file of tsFiles) {
+        await fs.promises.unlink(file);
+      }
+
+      // 🔹 Thumbnail (agar mavjud bo‘lsa)
+      if (video.thumbnailUrl) {
+        const thumbPath = path.join(thumbDir, video.thumbnailFilename);
+        if (await fileExists(thumbPath)) {
+          await fs.promises.unlink(thumbPath);
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Fayllarni o‘chirishda xatolik:', e.message);
+    }
+
+    // 🔚 Bazadan o‘chirish
     return this.videoRepo.delete(id);
   }
 
