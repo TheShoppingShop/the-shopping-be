@@ -14,7 +14,7 @@ export class VideoResponseDto {
   @ApiProperty() metaTitle?: string;
   @ApiProperty() metaDescription?: string;
   @ApiProperty() videoCode?: number;
-  @ApiProperty() metaKeywords?: string[];
+  @ApiProperty() metaKeywords?: string;
   @ApiProperty({ type: [String] }) tags: string[];
   @ApiProperty() categoryId: string;
   @ApiProperty() isPublished: boolean;

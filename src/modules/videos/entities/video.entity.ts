@@ -40,8 +40,8 @@ export class Video {
   @Column({ nullable: true })
   metaDescription?: string;
 
-  @Column('text', { array: true, nullable: true })
-  metaKeywords?: string[];
+  @Column('text', { nullable: true })
+  metaKeywords?: string;
 
   @Column({ default: 0 })
   likes: number;
