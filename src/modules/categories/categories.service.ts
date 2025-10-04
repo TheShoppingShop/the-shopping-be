@@ -18,8 +18,6 @@ export class CategoriesService {
 
   async create(dto: CreateCategoryDto, imgUrl?: string) {
     const slug = await generateUniqueSlug(dto.name, this.categoryRepo);
-    const existing = await this.categoryRepo.findOne({ where: { slug } });
-    console.log(existing, 'shu slug');
 
     imgUrl = `/uploads/categories/${imgUrl}`;
 
