@@ -43,7 +43,11 @@ export class VideosController {
         title: { type: 'string' },
         slug: { type: 'string' },
         description: { type: 'string' },
-        categoryId: { type: 'string' },
+        categoryIds: {
+          type: 'array',
+          items: { type: 'string' },
+          example: ['uuid-kat1', 'uuid-kat2'],
+        },
         views: { type: 'number' },
         likes: { type: 'number' },
         tags: { type: 'array', items: { type: 'string' } },

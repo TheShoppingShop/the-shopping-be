@@ -18,7 +18,7 @@ export class VideoResponseDto {
   @ApiProperty() videoCode?: number;
   @ApiProperty() metaKeywords?: string;
   @ApiProperty({ type: [String] }) tags: string[];
-  @ApiProperty() categoryId: string;
+  @ApiProperty() categoryIds: string[];
   @ApiProperty() isPublished: boolean;
   @ApiProperty() createdAt: Date;
 
@@ -31,7 +31,7 @@ export class VideoResponseDto {
     this.tags = video.tags;
     this.views = video.views;
     this.likes = video.likes;
-    this.categoryId = video.categoryId;
+    this.categoryIds = video.categories?.map((cat) => cat.id) || [];
     this.isPublished = video.isPublished;
     this.createdAt = video.createdAt;
     this.metaTitle = video.metaTitle;

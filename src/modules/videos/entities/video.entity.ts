@@ -3,8 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
+  JoinTable,
+  ManyToMany,
 } from 'typeorm';
 import { Category } from '@/modules/categories/entities/category.entity';
 
@@ -52,12 +52,19 @@ export class Video {
   @Column('text', { array: true, default: [] })
   tags: string[];
 
-  @ManyToOne(() => Category, { eager: true })
-  @JoinColumn({ name: 'categoryId' })
-  category: Category;
-
-  @Column()
-  categoryId: string;
+  @ManyToMany(() => Category, { eager: true })
+  @JoinTable({
+    name: 'video_categories',
+    joinColumn: {
+      name: 'videoId',
+      referencedColumnName: 'id',
+    },
+    inverseJoinColumn: {
+      name: 'categoryId',
+      referencedColumnName: 'id',
+    },
+  })
+  categories: Category[];
 
   @Column({ default: true })
   isPublished: boolean;

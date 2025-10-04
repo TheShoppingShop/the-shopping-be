@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Not, In, Brackets } from 'typeorm';
+import { Repository, ILike, In, Brackets } from 'typeorm';
 import { Video } from './entities/video.entity';
+import { Category } from '@/modules/categories/entities/category.entity';
 import { CreateVideoDto } from './dto/create-video.dto';
 import { UpdateVideoDto } from './dto/update-video.dto';
 import { VideoResponseDto } from './dto/video-response.dto';
@@ -19,6 +20,8 @@ export class VideosService {
   constructor(
     @InjectRepository(Video)
     private readonly videoRepo: Repository<Video>,
+    @InjectRepository(Category)
+    private readonly categoryRepo: Repository<Category>,
   ) {}
 
   private async convertToHLS(
@@ -74,6 +77,10 @@ export class VideosService {
       videoCode = lastVideoWithCode.videoCode + 1;
     }
 
+    const categories = dto.categoryIds?.length
+      ? await this.categoryRepo.findByIds(dto.categoryIds)
+      : [];
+
     const inputPath = path.join(
       process.cwd(),
       'uploads/videos',
@@ -91,6 +98,7 @@ export class VideosService {
       ...dto,
       slug,
       videoCode, // avtomatik qiymat
+      categories,
     });
 
     return this.videoRepo.save(video);
@@ -308,50 +316,91 @@ export class VideosService {
     return this.videoRepo.delete(id);
   }
 
+  // async getRelatedVideosWithPagination(slug: string, page = 1, limit = 10) {
+  //   const mainVideo = await this.videoRepo.findOne({
+  //     where: { slug },
+  //   });
+  //
+  //   if (!mainVideo) throw new NotFoundException('Video topilmadi');
+  //   this.videoRepo.increment({ id: mainVideo.id }, 'views', 1).then();
+  //
+  //   const allRelated = await this.videoRepo.find({
+  //     where: {
+  //       categoryId: mainVideo.categoryId,
+  //       id: Not(mainVideo.id),
+  //     },
+  //   });
+  //
+  //   const shuffled = allRelated.sort(() => Math.random() - 0.5);
+  //   const totalRelated = allRelated.length;
+  //
+  //   const startIndex = (page - 1) * limit;
+  //   const endIndex = page * limit;
+  //   const paginatedVideos = shuffled.slice(startIndex, endIndex);
+  //
+  //   let data: VideoResponseDto[] = [];
+  //   let total: number;
+  //   let totalPages: number;
+  //
+  //   if (page === 1) {
+  //     data = [mainVideo, ...paginatedVideos].map(
+  //       (v) => new VideoResponseDto(v),
+  //     );
+  //     total = totalRelated + 1;
+  //     totalPages = Math.ceil(total / limit);
+  //   } else {
+  //     data = paginatedVideos.map((v) => new VideoResponseDto(v));
+  //     total = totalRelated;
+  //     totalPages = Math.ceil(total / limit);
+  //   }
+  //
+  //   return {
+  //     page,
+  //     limit,
+  //     total,
+  //     totalPages,
+  //     data,
+  //   };
+  // }
   async getRelatedVideosWithPagination(slug: string, page = 1, limit = 10) {
     const mainVideo = await this.videoRepo.findOne({
       where: { slug },
+      relations: ['categories'],
     });
 
     if (!mainVideo) throw new NotFoundException('Video topilmadi');
-    this.videoRepo.increment({ id: mainVideo.id }, 'views', 1).then();
+    await this.videoRepo.increment({ id: mainVideo.id }, 'views', 1);
 
-    const allRelated = await this.videoRepo.find({
-      where: {
-        categoryId: mainVideo.categoryId, // 👈 category: { id: ... } emas!
-        id: Not(mainVideo.id),
-      },
-    });
+    const categoryIds = mainVideo.categories.map((cat) => cat.id);
 
-    const shuffled = allRelated.sort(() => Math.random() - 0.5);
-    const totalRelated = allRelated.length;
-
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedVideos = shuffled.slice(startIndex, endIndex);
-
-    let data: VideoResponseDto[] = [];
-    let total: number;
-    let totalPages: number;
-
-    if (page === 1) {
-      data = [mainVideo, ...paginatedVideos].map(
-        (v) => new VideoResponseDto(v),
-      );
-      total = totalRelated + 1;
-      totalPages = Math.ceil(total / limit);
-    } else {
-      data = paginatedVideos.map((v) => new VideoResponseDto(v));
-      total = totalRelated;
-      totalPages = Math.ceil(total / limit);
+    if (!categoryIds.length) {
+      return {
+        page,
+        limit,
+        total: 0,
+        totalPages: 0,
+        data: [],
+      };
     }
+
+    // 🔍 Related videolarni olib kelamiz
+    const qb = this.videoRepo
+      .createQueryBuilder('video')
+      .leftJoin('video.categories', 'category')
+      .where('category.id IN (:...categoryIds)', { categoryIds })
+      .andWhere('video.slug != :slug', { slug })
+      .orderBy('video.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [videos, total] = await qb.getManyAndCount();
 
     return {
       page,
       limit,
       total,
-      totalPages,
-      data,
+      totalPages: Math.ceil(total / limit),
+      data: [mainVideo, ...videos.map((v) => new VideoResponseDto(v))],
     };
   }
 

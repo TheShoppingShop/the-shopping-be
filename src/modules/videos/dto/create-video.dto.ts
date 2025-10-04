@@ -12,5 +12,7 @@ export class CreateVideoDto {
   @ApiProperty() @IsOptional() metaKeywords?: string;
   @ApiProperty() @IsOptional() videoCode?: number;
   @ApiProperty({ type: [String] }) @IsOptional() @IsArray() tags?: string[];
-  @ApiProperty() @IsString() @IsNotEmpty() categoryId: string;
+  @IsArray()
+  @IsString({ each: true })
+  categoryIds: string[];
 }
