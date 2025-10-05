@@ -220,13 +220,19 @@ export class VideosService {
       thumbnailFilename?: string;
     },
   ) {
-    const video = await this.findOne(id);
+    // 🔹 Entityni olamiz (DTO emas)
+    const video = await this.videoRepo.findOne({
+      where: { id },
+      relations: ['categories'],
+    });
+    if (!video) throw new NotFoundException('Video not found');
 
-    if (dto.videoFilename && dto.videoFilename !== video.videoUrl) {
+    // 🔹 Fayl nomi o‘zgargan bo‘lsa, eski faylni o‘chir, yangisini konvertatsiya qil
+    if (dto.videoFilename && dto.videoFilename !== video.videoFilename) {
       const oldPath = path.join(
         process.cwd(),
         'uploads/videos',
-        video.videoUrl,
+        video.videoFilename,
       );
       try {
         await unlink(oldPath);
@@ -247,15 +253,18 @@ export class VideosService {
         path.extname(dto.videoFilename),
         '',
       );
-
       await this.convertToHLS(inputPath, outputDir, baseName);
     }
 
-    if (dto.thumbnailFilename && dto.thumbnailFilename !== video.thumbnailUrl) {
+    // 🔹 Thumbnail o‘zgargan bo‘lsa
+    if (
+      dto.thumbnailFilename &&
+      dto.thumbnailFilename !== video.thumbnailFilename
+    ) {
       const oldThumbPath = path.join(
         process.cwd(),
         'uploads/thumbnails',
-        video.thumbnailUrl,
+        video.thumbnailFilename,
       );
       try {
         await unlink(oldThumbPath);
@@ -266,10 +275,92 @@ export class VideosService {
         );
       }
     }
-    await this.videoRepo.update(id, dto);
 
-    return this.findOne(id);
+    // 🔹 categoryIds keldi — ORM uchun relationsni yangilaymiz
+    if (dto.categoryIds && Array.isArray(dto.categoryIds)) {
+      video.categories = await this.categoryRepo.findBy({
+        id: In(dto.categoryIds),
+      });
+      delete dto.categoryIds; // ORM update()ga bormasin
+    }
+
+    // 🔹 Qolgan maydonlarni update qilamiz
+    Object.assign(video, dto);
+    await this.videoRepo.save(video);
+
+    // 🔹 Yakuniy holatini DTO sifatida qaytaramiz
+    return new VideoResponseDto(video);
   }
+
+  // async update(
+  //   id: string,
+  //   dto: UpdateVideoDto & {
+  //     videoFilename?: string;
+  //     thumbnailFilename?: string;
+  //   },
+  // ) {
+  //   const video = await this.findOne(id);
+  //
+  //   if (dto.videoFilename && dto.videoFilename !== video.videoUrl) {
+  //     const oldPath = path.join(
+  //       process.cwd(),
+  //       'uploads/videos',
+  //       video.videoUrl,
+  //     );
+  //     try {
+  //       await unlink(oldPath);
+  //     } catch (e) {
+  //       console.warn(
+  //         'Old video file not found or could not be deleted:',
+  //         e.message,
+  //       );
+  //     }
+  //
+  //     const inputPath = path.join(
+  //       process.cwd(),
+  //       'uploads/videos',
+  //       dto.videoFilename,
+  //     );
+  //     const outputDir = path.join(process.cwd(), 'uploads/videos');
+  //     const baseName = dto.videoFilename.replace(
+  //       path.extname(dto.videoFilename),
+  //       '',
+  //     );
+  //
+  //     await this.convertToHLS(inputPath, outputDir, baseName);
+  //   }
+  //
+  //   if (dto.thumbnailFilename && dto.thumbnailFilename !== video.thumbnailUrl) {
+  //     const oldThumbPath = path.join(
+  //       process.cwd(),
+  //       'uploads/thumbnails',
+  //       video.thumbnailUrl,
+  //     );
+  //     try {
+  //       await unlink(oldThumbPath);
+  //     } catch (e) {
+  //       console.warn(
+  //         'Old thumbnail not found or could not be deleted:',
+  //         e.message,
+  //       );
+  //     }
+  //   }
+  //
+  //   if (dto.categoryIds) {
+  //     const categoryIds = Array.isArray(dto.categoryIds)
+  //       ? dto.categoryIds
+  //       : [dto.categoryIds];
+  //
+  //     const categories = await this.categoryRepo.findBy({
+  //       id: In(categoryIds),
+  //     });
+  //     video.categories = categories; // yangi bog‘lanishlar
+  //   }
+  //
+  //   await this.videoRepo.update(id, dto);
+  //
+  //   return this.findOne(id);
+  // }
 
   async remove(id: string) {
     const video = await this.findOne(id); // bu VideoResponseDto bo‘lishi mumkin
