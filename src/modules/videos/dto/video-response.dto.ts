@@ -43,11 +43,15 @@ export class VideoResponseDto {
     this.thumbnailFilename = video.thumbnailFilename;
 
     const DOMAIN = process.env.DOMAIN || 'http://localhost:3011';
-    const baseName = video.videoFilename.replace('.mp4', '');
+    if (video.videoFilename) {
+      const baseName = video.videoFilename.replace('.mp4', '');
+      this.videoUrl = `${DOMAIN}/videos/stream/${baseName}.m3u8`;
+    } else {
+      this.videoUrl = null; // yoki '', xohlagancha
+    }
 
-    this.videoUrl = `${DOMAIN}/videos/stream/${baseName}.m3u8`;
     this.thumbnailUrl = video.thumbnailFilename
       ? `${DOMAIN}/uploads/thumbnails/${video.thumbnailFilename}`
-      : undefined;
+      : null;
   }
 }
