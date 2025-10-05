@@ -480,7 +480,7 @@ export class VideosService {
         limit,
         total: 0,
         totalPages: 0,
-        data: [],
+        data: [mainVideo],
       };
     }
 
@@ -501,7 +501,10 @@ export class VideosService {
       limit,
       total,
       totalPages: Math.ceil(total / limit),
-      data: [mainVideo, ...videos.map((v) => new VideoResponseDto(v))],
+      data: [
+        new VideoResponseDto(mainVideo),
+        ...videos.map((v) => new VideoResponseDto(v)),
+      ],
     };
   }
 
