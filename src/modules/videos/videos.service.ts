@@ -218,78 +218,88 @@ export class VideosService {
     dto: UpdateVideoDto & {
       videoFilename?: string;
       thumbnailFilename?: string;
+      categoryIds?: string[] | string | number[] | number;
     },
   ) {
-    // 🔹 Entityni olamiz (DTO emas)
+    // 1) Entity (DTO emas!)
     const video = await this.videoRepo.findOne({
       where: { id },
       relations: ['categories'],
     });
     if (!video) throw new NotFoundException('Video not found');
 
-    // 🔹 Fayl nomi o‘zgargan bo‘lsa, eski faylni o‘chir, yangisini konvertatsiya qil
+    // 2) Video fayli o‘zgarganmi?
     if (dto.videoFilename && dto.videoFilename !== video.videoFilename) {
-      const oldPath = path.join(
-        process.cwd(),
-        'uploads/videos',
-        video.videoFilename,
-      );
       try {
-        await unlink(oldPath);
-      } catch (e) {
-        console.warn(
-          'Old video file not found or could not be deleted:',
-          e.message,
-        );
-      }
+        const videoDir = path.join(process.cwd(), 'uploads/videos');
+        const old = video.videoFilename;
+        if (old) {
+          const oldBase = old.replace(path.extname(old), '');
+          const oldMp4 = path.join(videoDir, old);
+          const oldM3u8 = path.join(videoDir, `${oldBase}.m3u8`);
+          if (fs.existsSync(oldMp4)) await fs.promises.unlink(oldMp4);
+          if (fs.existsSync(oldM3u8)) await fs.promises.unlink(oldM3u8);
+          for (const f of globSync(path.join(videoDir, `${oldBase}*.ts`))) {
+            await fs.promises.unlink(f);
+          }
+        }
 
-      const inputPath = path.join(
-        process.cwd(),
-        'uploads/videos',
-        dto.videoFilename,
-      );
-      const outputDir = path.join(process.cwd(), 'uploads/videos');
-      const baseName = dto.videoFilename.replace(
-        path.extname(dto.videoFilename),
-        '',
-      );
-      await this.convertToHLS(inputPath, outputDir, baseName);
+        const inputPath = path.join(videoDir, dto.videoFilename);
+        const baseName = dto.videoFilename.replace(
+          path.extname(dto.videoFilename),
+          '',
+        );
+        await this.convertToHLS(inputPath, videoDir, baseName);
+
+        video.videoFilename = dto.videoFilename;
+      } catch (e: any) {
+        console.warn('Video rotate failed:', e.message);
+      }
     }
 
-    // 🔹 Thumbnail o‘zgargan bo‘lsa
+    // 3) Thumbnail o‘zgarganmi?
     if (
       dto.thumbnailFilename &&
       dto.thumbnailFilename !== video.thumbnailFilename
     ) {
-      const oldThumbPath = path.join(
-        process.cwd(),
-        'uploads/thumbnails',
-        video.thumbnailFilename,
-      );
       try {
-        await unlink(oldThumbPath);
-      } catch (e) {
-        console.warn(
-          'Old thumbnail not found or could not be deleted:',
-          e.message,
-        );
+        const dir = path.join(process.cwd(), 'uploads/thumbnails');
+        if (video.thumbnailFilename) {
+          const oldThumb = path.join(dir, video.thumbnailFilename);
+          if (fs.existsSync(oldThumb)) await fs.promises.unlink(oldThumb);
+        }
+        video.thumbnailFilename = dto.thumbnailFilename;
+      } catch (e: any) {
+        console.warn('Thumb rotate failed:', e.message);
       }
     }
 
-    // 🔹 categoryIds keldi — ORM uchun relationsni yangilaymiz
-    if (dto.categoryIds && Array.isArray(dto.categoryIds)) {
-      video.categories = await this.categoryRepo.findBy({
-        id: In(dto.categoryIds),
-      });
-      delete dto.categoryIds; // ORM update()ga bormasin
+    // 4) Kategoriyalar (Many-to-Many)
+    if (dto.categoryIds !== undefined) {
+      const raw = Array.isArray(dto.categoryIds)
+        ? dto.categoryIds
+        : [dto.categoryIds];
+      const ids = raw.filter(Boolean).map((x: any) => String(x));
+      video.categories = ids.length
+        ? await this.categoryRepo.findBy({ id: In(ids) })
+        : [];
+      // dto ichida qolsa ham farqi yo‘q, biz update() chaqirmaymiz
     }
 
-    // 🔹 Qolgan maydonlarni update qilamiz
-    Object.assign(video, dto);
-    await this.videoRepo.save(video);
+    // 5) Oddiy maydonlar — **faqat undefined bo‘lmasa** yozamiz (aks holda mavjud qiymatni o‘chirib yubormasin)
+    if (dto.title) video.title = dto.title;
+    if (dto.description) video.description = dto.description;
+    if (dto.amazonLink) video.amazonLink = dto.amazonLink;
+    if (dto.tags) video.tags = dto.tags;
+    if (dto.metaTitle) video.metaTitle = dto.metaTitle;
+    if (dto.metaDescription) video.metaDescription = dto.metaDescription;
+    if (dto.metaKeywords) video.metaKeywords = dto.metaKeywords; // sizda string
 
-    // 🔹 Yakuniy holatini DTO sifatida qaytaramiz
-    return new VideoResponseDto(video);
+    // 6) SAQLASH (hech qanday update(dto) YO‘Q!)
+    const saved = await this.videoRepo.save(video);
+
+    // 7) DTO qaytarish
+    return new VideoResponseDto(saved);
   }
 
   // async update(
